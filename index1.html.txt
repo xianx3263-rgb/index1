@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PaperHub - 论文归纳笔记</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Vue 3 -->
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap');
+        
+        :root {
+            --baby-blue: #E0F2FE;
+            --apple-glass: rgba(255, 255, 255, 0.7);
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+            background-attachment: fixed;
+            min-height: 100vh;
+            color: #1e293b;
+        }
+
+        .glass {
+            background: var(--apple-glass);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.07);
+        }
+
+        .sidebar-item-active {
+            background: rgba(59, 130, 246, 0.1);
+            color: #2563eb;
+            font-weight: 600;
+        }
+
+        /* 隐藏滚动条但保留功能 */
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        .tag-input:focus { outline: none; border-bottom: 2px solid #3b82f6; }
+    </style>
+</head>
+<body>
+    <div id="app" class="p-4 md:p-8">
+        <!-- 顶部栏 -->
+        <header class="max-w-7xl mx-auto flex justify-between items-center mb-8 px-4">
+            <h1 class="text-2xl font-600 text-blue-600 tracking-tight flex items-center gap-2">
+                <i data-lucide="book-open"></i> PaperHub
+            </h1>
+            
+            <div class="flex items-center gap-4">
+                <!-- 搜索框 -->
+                <div class="relative hidden md:block">
+                    <input v-model="searchQuery" :placeholder="t.searchPlaceholder" 
+                           class="glass px-4 py-2 pl-10 rounded-full text-sm focus:ring-2 focus:ring-blue-300 outline-none w-64 transition-all">
+                    <i data-lucide="search" class="absolute left-3 top-2.5 w-4 h-4 text-gray-400"></i>
+                </div>
+
+                <!-- 语言切换 -->
+                <select v-model="lang" class="glass px-3 py-1.5 rounded-lg text-sm outline-none cursor-pointer">
+                    <option value="zh">中文</option>
+                    <option value="ko">한국어</option>
+                    <option value="en">English</option>
+                </select>
+
+                <button @click="showAddModal = true" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-full text-sm flex items-center gap-2 shadow-lg transition-transform active:scale-95">
+                    <i data-lucide="plus" class="w-4 h-4"></i> {{ t.addPaper }}
+                </button>
+            </div>
+        </header>
+
+        <main class="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-12 gap-8">
+            <!-- 侧边栏分类 -->
+            <aside class="md:col-span-3 space-y-6">
+                <!-- 语言大类 -->
+                <section class="glass rounded-2xl p-5">
+                    <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">{{ t.langCategory }}</h3>
+                    <ul class="space-y-2">
+                        <li v-for="l in ['All', 'Chinese', 'Korean', 'English']" 
+                            @click="filterLang = l"
+                            :class="['flex items-center gap-3 p-2 rounded-xl cursor-pointer transition-colors hover:bg-white/50', filterLang === l ? 'sidebar-item-active' : '']">
+                            <i data-lucide="languages" class="w-4 h-4"></i>
+                            <span class="text-sm">{{ t[l.toLowerCase()] || l }}</span>
+                        </li>
+                    </ul>
+                </section>
+
+                <!-- 论文类别 -->
+                <section class="glass rounded-2xl p-5">
+                    <h3 class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4">{{ t.typeCategory }}</h3>
+                    <ul class="space-y-2">
+                        <li v-for="type in ['All', 'Academic', 'Data Analysis', 'Literature']" 
+                            @click="filterType = type"
+                            :class="['flex items-center gap-3 p-2 rounded-xl cursor-pointer transition-colors hover:bg-white/50', filterType === type ? 'sidebar-item-active' : '']">
+                            <i data-lucide="layers" class="w-4 h-4"></i>
+                            <span class="text-sm text-truncate">{{ t[type.toLowerCase().replace(' ', '')] || type }}</span>
+                        </li>
+                    </ul>
+                </section>
+            </aside>
+
+            <!-- 论文列表 -->
+            <div class="md:col-span-9">
+                <div v-if="filteredPapers.length === 0" class="glass rounded-3xl p-20 text-center">
+                    <i data-lucide="file-question" class="w-12 h-12 text-blue-200 mx-auto mb-4"></i>
+                    <p class="text-gray-400">{{ t.noData }}</p>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div v-for="(paper, index) in filteredPapers" :key="index" 
+                         class="glass rounded-2xl p-6 hover:translate-y-[-4px] transition-all duration-300 group">
+                        <div class="flex justify-between items-start mb-4">
+                            <span class="text-[10px] font-bold px-2 py-1 rounded bg-blue-100 text-blue-600 uppercase">{{ paper.lang }}</span>
+                            <div class="flex gap-2">
+                                <button @click="deletePaper(index)" class="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-opacity">
+                                    <i data-lucide="trash-2" class="w-4 h-4"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <h2 class="text-lg font-bold mb-2 group-hover:text-blue-600 transition-colors">{{ paper.title }}</h2>
+                        <p class="text-xs text-blue-400 font-medium mb-4 flex items-center gap-1">
+                            <i data-lucide="hash" class="w-3 h-3"></i> {{ t[paper.type.toLowerCase().replace(' ', '')] || paper.type }}
+                        </p>
+                        
+                        <!-- 标签 -->
+                        <div class="flex flex-wrap gap-2 mb-4">
+                            <span v-for="tag in paper.tags" class="text-[10px] bg-white/50 border border-white px-2 py-0.5 rounded-full text-gray-500">
+                                # {{ tag }}
+                            </span>
+                        </div>
+
+                        <!-- 笔记预览 -->
+                        <div class="bg-blue-50/50 rounded-xl p-3 border border-blue-100/50">
+                            <p class="text-xs text-gray-600 italic line-clamp-3">
+                                {{ paper.notes || t.noNotes }}
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- 添加论文模态框 -->
+        <div v-if="showAddModal" class="fixed inset-0 bg-black/20 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div class="glass w-full max-w-lg rounded-3xl overflow-hidden shadow-2xl animate-in zoom-in duration-300">
+                <div class="p-6 border-b border-white/20 flex justify-between items-center">
+                    <h2 class="text-xl font-bold text-blue-600">{{ t.addNew }}</h2>
+                    <button @click="showAddModal = false" class="text-gray-400 hover:text-gray-600"><i data-lucide="x"></i></button>
+                </div>
+                <div class="p-6 space-y-4">
+                    <input v-model="newPaper.title" :placeholder="t.formTitle" class="w-full bg-white/50 p-3 rounded-xl border border-white outline-none focus:ring-2 focus:ring-blue-300 transition">
+                    
+                    <div class="grid grid-cols-2 gap-4">
+                        <select v-model="newPaper.lang" class="bg-white/50 p-3 rounded-xl border border-white outline-none">
+                            <option value="Chinese">中文 (Chinese)</option>
+                            <option value="Korean">한국어 (Korean)</option>
+                            <option value="English">English</option>
+                        </select>
+                        <select v-model="newPaper.type" class="bg-white/50 p-3 rounded-xl border border-white outline-none">
+                            <option value="Academic">学术论文 (Academic)</option>
+                            <option value="Data Analysis">数据分析 (Data Analysis)</option>
+                            <option value="Literature">综述类 (Literature)</option>
+                        </select>
+                    </div>
+
+                    <input v-model="tagInput" @keyup.enter="addTag" :placeholder="t.formTags" class="w-full bg-white/50 p-3 rounded-xl border border-white outline-none transition">
+                    <div class="flex flex-wrap gap-2">
+                        <span v-for="tag in newPaper.tags" class="bg-blue-100 text-blue-600 text-xs px-2 py-1 rounded-full flex items-center gap-1">
+                            {{ tag }} <i @click="removeTag(tag)" data-lucide="x" class="w-3 h-3 cursor-pointer"></i>
+                        </span>
+                    </div>
+
+                    <textarea v-model="newPaper.notes" :placeholder="t.formNotes" rows="4" class="w-full bg-white/50 p-3 rounded-xl border border-white outline-none focus:ring-2 focus:ring-blue-300 transition"></textarea>
+                </div>
+                <div class="p-6 bg-white/30 flex gap-3">
+                    <button @click="savePaper" class="flex-1 bg-blue-500 text-white font-bold py-3 rounded-xl shadow-lg hover:bg-blue-600 transition active:scale-95">
+                        {{ t.save }}
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { createApp, ref, computed, onMounted, watch } = Vue;
+
+        createApp({
+            setup() {
+                // 国际化文本
+                const i18n = {
+                    zh: {
+                        searchPlaceholder: "搜索论文标题、标签...",
+                        addPaper: "添加论文",
+                        langCategory: "按语言分类",
+                        typeCategory: "按类别分类",
+                        all: "全部显示",
+                        chinese: "中文论文",
+                        korean: "韩文论文",
+                        english: "英文论文",
+                        academic: "作品/学术类",
+                        dataanalysis: "数据分析类",
+                        literature: "文献综述类",
+                        noData: "还没有归纳论文，点击右上角开始记录",
+                        addNew: "记录新论文",
+                        formTitle: "论文标题...",
+                        formTags: "输入标签并按回车...",
+                        formNotes: "在这里写下你的心得体会或论文摘要...",
+                        save: "保存记录",
+                        noNotes: "暂无笔记内容...",
+                    },
+                    ko: {
+                        searchPlaceholder: "논문 제목, 태그 검색...",
+                        addPaper: "논문 추가",
+                        langCategory: "언어별 분류",
+                        typeCategory: "카테고리별 분류",
+                        all: "전체 보기",
+                        chinese: "중국어 논문",
+                        korean: "한국어 논문",
+                        english: "영어 논문",
+                        academic: "작품/학술 논문",
+                        dataanalysis: "데이터 분석",
+                        literature: "문헌 고찰",
+                        noData: "기록된 논문이 없습니다. 추가 버튼을 눌러보세요",
+                        addNew: "새 논문 기록",
+                        formTitle: "논문 제목...",
+                        formTags: "태그 입력 후 엔터...",
+                        formNotes: "논문 초록이나 공부한 내용을 기록하세요...",
+                        save: "저장하기",
+                        noNotes: "기록된 메모가 없습니다...",
+                    },
+                    en: {
+                        searchPlaceholder: "Search titles, tags...",
+                        addPaper: "Add Paper",
+                        langCategory: "Languages",
+                        typeCategory: "Categories",
+                        all: "All Papers",
+                        chinese: "Chinese",
+                        korean: "Korean",
+                        english: "English",
+                        academic: "Academic/Creative",
+                        dataanalysis: "Data Analysis",
+                        literature: "Literature Review",
+                        noData: "No papers yet. Click the button to start.",
+                        addNew: "New Entry",
+                        formTitle: "Paper Title...",
+                        formTags: "Enter tags and press Enter...",
+                        formNotes: "Write your notes or abstract here...",
+                        save: "Save Entry",
+                        noNotes: "No notes provided...",
+                    }
+                };
+
+                const lang = ref('zh');
+                const t = computed(() => i18n[lang.value]);
+                
+                // 数据状态
+                const papers = ref(JSON.parse(localStorage.getItem('papers') || '[]'));
+                const showAddModal = ref(false);
+                const searchQuery = ref('');
+                const filterLang = ref('All');
+                const filterType = ref('All');
+                const tagInput = ref('');
+
+                const newPaper = ref({
+                    title: '',
+                    lang: 'Chinese',
+                    type: 'Academic',
+                    tags: [],
+                    notes: ''
+                });
+
+                // 过滤逻辑
+                const filteredPapers = computed(() => {
+                    return papers.value.filter(p => {
+                        const matchSearch = p.title.toLowerCase().includes(searchQuery.value.toLowerCase()) || 
+                                          p.tags.some(tag => tag.toLowerCase().includes(searchQuery.value.toLowerCase()));
+                        const matchLang = filterLang.value === 'All' || p.lang === filterLang.value;
+                        const matchType = filterType.value === 'All' || p.type === filterType.value;
+                        return matchSearch && matchLang && matchType;
+                    });
+                });
+
+                // 操作方法
+                const addTag = () => {
+                    if (tagInput.value.trim() && !newPaper.value.tags.includes(tagInput.value)) {
+                        newPaper.value.tags.push(tagInput.value.trim());
+                        tagInput.value = '';
+                    }
+                };
+
+                const removeTag = (tag) => {
+                    newPaper.value.tags = newPaper.value.tags.filter(t => t !== tag);
+                };
+
+                const savePaper = () => {
+                    if (!newPaper.value.title) return alert("Title is required");
+                    papers.value.unshift({...newPaper.value});
+                    localStorage.setItem('papers', JSON.stringify(papers.value));
+                    showAddModal.value = false;
+                    newPaper.value = { title: '', lang: 'Chinese', type: 'Academic', tags: [], notes: '' };
+                };
+
+                const deletePaper = (index) => {
+                    if (confirm("Delete this entry?")) {
+                        papers.value.splice(index, 1);
+                        localStorage.setItem('papers', JSON.stringify(papers.value));
+                    }
+                };
+
+                watch(showAddModal, (val) => {
+                    if (val) setTimeout(() => lucide.createIcons(), 10);
+                });
+
+                onMounted(() => {
+                    lucide.createIcons();
+                });
+
+                return {
+                    lang, t, papers, showAddModal, searchQuery, filterLang, filterType, 
+                    newPaper, tagInput, filteredPapers, addTag, removeTag, savePaper, deletePaper
+                };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
